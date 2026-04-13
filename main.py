@@ -3,6 +3,7 @@ import time
 import ujson
 import boot
 import font
+import sprites
 from ili9341 import ILI9341
 from xpt2046 import XPT2046
 from themes import THEMES
@@ -113,7 +114,7 @@ def main():
             
             # Draw Animal
             sprite = theme['sprite_wake'] if is_wake else theme['sprite_sleep']
-            font.draw_sprite32(display, sprite, 160 - 64, 40, scale=4, color=fg)
+            sprites.draw_palette_sprite(display, sprite, theme['palette'], 160 - 64, 40, scale=4)
             
             # Draw Time
             time_str = "{:02d}:{:02d}".format(t[3], t[4])
