@@ -8,5 +8,6 @@
     "wake_weekend": "08:00",
     "sleep_weekend": "21:00",
     "active_theme": "kitten",
-    "brightness_auto": true
+    "brightness_auto": true,
+    "demo": false
 }

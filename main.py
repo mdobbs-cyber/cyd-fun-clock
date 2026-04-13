@@ -179,7 +179,68 @@ def main():
         draw_banner(is_wake, fg, bg)
         draw_time(time_str, fg, bg)
 
-    # ── Main Loop ────────────────────────────────────────────────────────────────
+    # ── Demo Loop ──────────────────────────────────────────────────────────────
+    def demo_loop():
+        """
+        Cycles through every animal × every state every DEMO_SECS seconds.
+        Sequence: kitten wake → kitten sleep → dolphin wake → dolphin sleep
+                  → chicken wake → chicken sleep → (repeat)
+        Touch still works to skip to the next slide immediately.
+        """
+        DEMO_SECS = 5
+        states    = [(k, True)  for k in theme_keys] + \
+                    [(k, False) for k in theme_keys]
+        # Interleave: kitten-wake, kitten-sleep, dolphin-wake, dolphin-sleep ...
+        interleaved = []
+        for k in theme_keys:
+            interleaved.append((k, True))
+            interleaved.append((k, False))
+
+        idx      = 0
+        n_states = len(interleaved)
+
+        while True:
+            animal_key, is_wake = interleaved[idx]
+            theme    = THEMES[animal_key]
+            t        = get_local_time()
+            time_str = "{:02d}:{:02d}".format(t[3], t[4])
+
+            # Draw the current state
+            full_redraw(is_wake, theme, time_str)
+
+            # LED feedback
+            if is_wake:
+                set_led(0, 512, 0)
+            else:
+                set_led(256, 128, 0)
+
+            # Wait DEMO_SECS, but check for touch every 100 ms
+            deadline = time.time() + DEMO_SECS
+            while time.time() < deadline:
+                if touch.get_touch():
+                    time.sleep(0.3)   # debounce
+                    break             # skip to next slide
+                # Keep time current during the wait
+                t2 = get_local_time()
+                ts2 = "{:02d}:{:02d}".format(t2[3], t2[4])
+                if ts2 != time_str:
+                    bg = theme['bg_wake'] if is_wake else theme['bg_sleep']
+                    fg = theme['fg_wake'] if is_wake else theme['fg_sleep']
+                    draw_time(ts2, fg, bg)
+                    time_str = ts2
+                # Auto-brightness
+                if config['brightness_auto']:
+                    raw = ldr.read()
+                    led_bl.duty(max(100, min(1023, (4095 - raw) // 4)))
+                time.sleep(0.1)
+
+            idx = (idx + 1) % n_states
+
+    # ── Main Loop ──────────────────────────────────────────────────────────────
+    if config.get('demo', False):
+        print("[demo] Starting demo mode — cycling all 6 states every 5 s")
+        demo_loop()          # never returns
+
     while True:
         now = time.time()
 
