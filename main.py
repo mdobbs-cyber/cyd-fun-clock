@@ -3,10 +3,46 @@ import time
 import ujson
 import boot
 import font
-import sprites
 from ili9341 import ILI9341
 from xpt2046 import XPT2046
 from themes import THEMES
+
+# ── Sprite renderer (self-contained, no external module dependency) ────────────
+_spr_cache = {}
+
+def _blit_sprite(display, path, palette, x=0, y=0):
+    """Load a 240x240 4-bit .bin sprite and blit it to the display."""
+    if _spr_cache.get('p') == path:
+        data = _spr_cache['d']
+    else:
+        with open(path, 'rb') as f:
+            data = f.read()
+        _spr_cache['p'] = path
+        _spr_cache['d'] = data
+
+    n = 240
+    pal = bytearray(32)
+    for i, c in enumerate(palette):
+        pal[i * 2]     = (c >> 8) & 0xFF
+        pal[i * 2 + 1] = c & 0xFF
+
+    display.set_window(x, y, x + n - 1, y + n - 1)
+    row_buf = bytearray(n * 2)
+    half_n  = n // 2
+
+    display.dc.value(1)
+    display.cs.value(0)
+    for row in range(n):
+        off = row * half_n
+        for col in range(n):
+            v   = data[off + col // 2]
+            idx = (v >> 4) if (col & 1) == 0 else (v & 0x0F)
+            p   = idx * 2
+            pos = col * 2
+            row_buf[pos]     = pal[p]
+            row_buf[pos + 1] = pal[p + 1]
+        display.spi.write(row_buf)
+    display.cs.value(1)
 
 # CYD Pinout
 SPI_SCK, SPI_MOSI, SPI_MISO = 14, 13, 12
@@ -133,18 +169,13 @@ def main():
 
     def full_redraw(is_wake, theme, time_str):
         """Full screen redraw: background → native sprite → text overlays."""
-        bg      = theme['bg_wake']       if is_wake else theme['bg_sleep']
-        fg      = theme['fg_wake']       if is_wake else theme['fg_sleep']
-        palette = theme['palette_wake']  if is_wake else theme['palette_sleep']
-        sprite  = theme['sprite_wake']   if is_wake else theme['sprite_sleep']
+        bg      = theme['bg_wake']      if is_wake else theme['bg_sleep']
+        fg      = theme['fg_wake']      if is_wake else theme['fg_sleep']
+        palette = theme['palette_wake'] if is_wake else theme['palette_sleep']
+        sprite  = theme['sprite_wake']  if is_wake else theme['sprite_sleep']
 
-        # 1. Clear entire screen
         display.clear(bg)
-
-        # 2. Blit native 240×240 sprite (no scaling loop — pixel-perfect)
-        sprites.draw_sprite_file(display, sprite, palette, SPRITE_X, SPRITE_Y)
-
-        # 3. Overlay text panels
+        _blit_sprite(display, sprite, palette, SPRITE_X, SPRITE_Y)
         draw_banner(is_wake, fg, bg)
         draw_time(time_str, fg, bg)
 
