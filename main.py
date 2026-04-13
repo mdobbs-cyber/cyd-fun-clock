@@ -16,18 +16,15 @@ LDR_PIN = 34
 RGB_R, RGB_G, RGB_B = 4, 16, 17
 
 # ── Layout constants ──────────────────────────────────────────────────────────
-# Screen: 320 x 240 landscape
-# Sprite: 24px * scale=10  →  240 x 240, centered at x=40
-SPRITE_SCALE = 10
-SPRITE_SIZE  = 24 * SPRITE_SCALE          # 240
-SPRITE_X     = (320 - SPRITE_SIZE) // 2   # 40  (40 px background strips each side)
-SPRITE_Y     = 0
+# Screen: 320 × 240 landscape.  Sprite is 240×240 native, drawn at x=40, y=0.
+SPRITE_X = (320 - 240) // 2   # 40 — centred horizontally
+SPRITE_Y = 0
 
-# Top banner strip  (overlaid on sprite, solid bg band)
+# Top banner strip
 BANNER_Y   = 4
 BANNER_H   = 22
 
-# Bottom time strip (overlaid on sprite, solid bg band)
+# Bottom time strip
 TIME_Y     = 212
 TIME_H     = 28
 TIME_SCALE = 3
@@ -135,21 +132,19 @@ def main():
         font.draw_text(display, time_str, TIME_X, TIME_Y, scale=TIME_SCALE, color=fg)
 
     def full_redraw(is_wake, theme, time_str):
-        """Full screen redraw: background → sprite → text overlays."""
-        bg     = theme['bg_wake']  if is_wake else theme['bg_sleep']
-        fg     = theme['fg_wake']  if is_wake else theme['fg_sleep']
-        sprite = theme['sprite_wake'] if is_wake else theme['sprite_sleep']
+        """Full screen redraw: background → native sprite → text overlays."""
+        bg      = theme['bg_wake']       if is_wake else theme['bg_sleep']
+        fg      = theme['fg_wake']       if is_wake else theme['fg_sleep']
+        palette = theme['palette_wake']  if is_wake else theme['palette_sleep']
+        sprite  = theme['sprite_wake']   if is_wake else theme['sprite_sleep']
 
-        # 1. Clear entire screen with theme background
+        # 1. Clear entire screen
         display.clear(bg)
 
-        # 2. Blit full-screen sprite (240×240, centred horizontally)
-        sprites.draw_palette_sprite(
-            display, sprite, theme['palette'],
-            SPRITE_X, SPRITE_Y, scale=SPRITE_SCALE
-        )
+        # 2. Blit native 240×240 sprite (no scaling loop — pixel-perfect)
+        sprites.draw_sprite_file(display, sprite, palette, SPRITE_X, SPRITE_Y)
 
-        # 3. Overlay text panels (erases local strip, draws text)
+        # 3. Overlay text panels
         draw_banner(is_wake, fg, bg)
         draw_time(time_str, fg, bg)
 
