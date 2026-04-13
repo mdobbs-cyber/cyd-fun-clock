@@ -1,0 +1,89 @@
+# Theme definitions for the Animal Companion Clock
+# Each sprite is 32x32 pixels, bitpacked as a tuple of 32 integers.
+
+THEMES = {
+    "kitten": {
+        "name": "Luna",
+        "color_wake": 0xFFFF, # White/Silver Kitten
+        "color_sleep": 0x3186, # Darker silhouette
+        "bg_wake": 0x7E0,    # Sunny Green
+        "bg_sleep": 0x000F,   # Deep Blue
+        # 32x32 Kitten Sprite (Simplified)
+        "sprite_wake": (
+            0x00000000, 0x00000000, 0x00000000, 0x01800180, 
+            0x03C003C0, 0x07E007E0, 0x0FF00FF0, 0x1FF81FF8,
+            0x3FFC3FFC, 0x3FFC3FFC, 0x3FFC3FFC, 0x3FFC3FFC,
+            0x1FF81FF8, 0x1FF81FF8, 0x1FF81FF8, 0x1FF81FF8,
+            0x1FF81FF8, 0x1FF81FF8, 0x1FF81FF8, 0x0FF00FF0,
+            0x0FF00FF0, 0x06600660, 0x00000000, 0x00000000,
+            0x00000000, 0x00000000, 0x00000000, 0x00000000,
+            0x00000000, 0x00000000, 0x00000000, 0x00000000
+        ),
+        "sprite_sleep": (
+            0x00000000, 0x00000000, 0x00000000, 0x00000000,
+            0x00000000, 0x00000000, 0x00000000, 0x01800180,
+            0x03C003C0, 0x07E007E0, 0x0FF00FF0, 0x1FF81FF8,
+            0x3FFC3FFC, 0x3FFC3FFC, 0x3FFC3FFC, 0x1FF81FF8,
+            0x1FF81FF8, 0x1FF81FF8, 0x1FF81FF8, 0x0FF00FF0,
+            0x00000000, 0x00000000, 0x00000000, 0x00000000,
+            0x00000000, 0x00000000, 0x00000000, 0x00000000,
+            0x00000000, 0x00000000, 0x00000000, 0x00000000
+        )
+    },
+    "dolphin": {
+        "name": "Splash",
+        "color_wake": 0x07FF, # Cyan
+        "color_sleep": 0x3186, # Dark Steel
+        "bg_wake": 0x001F,    # Ocean Blue
+        "bg_sleep": 0x000F,   # Midnight Ocean
+        # 32x32 Dolphin Sprite (Jumping)
+        "sprite_wake": (
+            0x00000000, 0x00000000, 0x00000000, 0x00000000,
+            0x00000380, 0x000007C0, 0x00000FE0, 0x00001FF0,
+            0x00003FF8, 0x00007FFC, 0x0000FFFE, 0x0001FFFF,
+            0x0003FFFF, 0x0007FFF0, 0x000FFFF0, 0x001FFFF0,
+            0x003FFFF0, 0x007FFF00, 0x00FFFF00, 0x01FFFE00,
+            0x03FFF800, 0x07FFF000, 0x0FFFE000, 0x1FFFF000,
+            0x3FFFF800, 0x7FFFFC00, 0x00000000, 0x00000000,
+            0x00000000, 0x00000000, 0x00000000, 0x00000000
+        ),
+        "sprite_sleep": (
+            0x00000000, 0x00000000, 0x00000000, 0x00000000,
+            0x00000000, 0x00000000, 0x00000000, 0x00000000,
+            0x00000000, 0x00000000, 0x00000000, 0x00000000,
+            0x0000FFFF, 0x0001FFFF, 0x0003FFFF, 0x0007FFFF,
+            0x000FFFFF, 0x000FFFFF, 0x000FFFFF, 0x0007FFFF,
+            0x0003FFFF, 0x0001FFFF, 0x0000FFFF, 0x00000000,
+            0x00000000, 0x00000000, 0x00000000, 0x00000000,
+            0x00000000, 0x00000000, 0x00000000, 0x00000000
+        )
+    },
+    "chicken": {
+        "name": "Peep",
+        "color_wake": 0xFFE0, # Yellow
+        "color_sleep": 0x8410, # Dim Yellow
+        "bg_wake": 0x07E0,    # Farm Green
+        "bg_sleep": 0x2104,   # Night Green
+        # 32x32 Chicken Sprite
+        "sprite_wake": (
+            0x00000000, 0x00000000, 0x00000000, 0x0001C000,
+            0x0003E000, 0x0007F000, 0x000FF800, 0x001FFC00,
+            0x003FFE00, 0x007FFF00, 0x00FFFF80, 0x01FFFFC0,
+            0x01FFFFC0, 0x03FFFFE0, 0x03FFFFE0, 0x07FFFFFF,
+            0x0FFFFFFF, 0x0FFFFFFF, 0x0FFFFFFF, 0x07FFFFFF,
+            0x03FFFFFF, 0x01FFFFFF, 0x00FFFFFF, 0x007FFFFE,
+            0x003FFFFC, 0x001FFFF8, 0x000FFFF0, 0x0007FFE0,
+            0x0001C000, 0x00000000, 0x00000000, 0x00000000
+        ),
+        "sprite_sleep": (
+            0x00000000, 0x00000000, 0x00000000, 0x00000000,
+            0x00000000, 0x00000000, 0x00000000, 0x00000000,
+            0x00000000, 0x00000000, 0x0001C000, 0x0003E000,
+            0x0007F000, 0x000FF800, 0x001FFC00, 0x003FFE00,
+            0x007FFF00, 0x00FFFF80, 0x01FFFFC0, 0x01FFFFC0,
+            0x01FFFFC0, 0x00FFFF80, 0x007FFF00, 0x003FFE00,
+            0x000FF800, 0x0007F000, 0x0003E000, 0x0001C000,
+            0x00000000, 0x00000000, 0x00000000, 0x00000000
+        )
+    }
+}
