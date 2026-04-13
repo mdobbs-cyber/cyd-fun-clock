@@ -110,7 +110,7 @@ def main():
             
             # --- Draw UI ---
             bg = theme['bg_wake'] if is_wake else theme['bg_sleep']
-            fg = theme['color_wake'] if is_wake else theme['color_sleep']
+            fg = theme['fg_wake'] if is_wake else theme['fg_sleep']
             
             # Draw Animal
             sprite = theme['sprite_wake'] if is_wake else theme['sprite_sleep']

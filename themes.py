@@ -6,6 +6,8 @@ THEMES = {
         "name": "Luna",
         "bg_wake": 0xBDF7,   # Sky Blue
         "bg_sleep": 0x10A2,  # Midnight
+        "fg_wake": 0x0000,   # Black text on light blue
+        "fg_sleep": 0xFFFF,  # White text on dark blue
         "palette": [
             0x0000, 0x0000, 0x2104, 0x4208, # 0:Transp, 1:Black, 2:DarkGrey, 3:MedGrey
             0x8410, 0xF81F, 0x07E0, 0x03E0, # 4:LightGrey, 5:Pink, 6:Green, 7:DarkGreen
@@ -53,6 +55,8 @@ THEMES = {
         "name": "Splash",
         "bg_wake": 0x03FF,
         "bg_sleep": 0x000F,
+        "fg_wake": 0xFFFF,
+        "fg_sleep": 0x07FF,
         "palette": [
             0x0000, 0x001F, 0x05FF, 0x07FF, # 0:Transp, 1:DarkBlue, 2:MedBlue, 3:Cyan
             0xFFFF, 0x0000, 0x0000, 0x0000, # 4:White
@@ -80,6 +84,8 @@ THEMES = {
         "name": "Peep",
         "bg_wake": 0x07E0,
         "bg_sleep": 0x2104,
+        "fg_wake": 0xFFFF,
+        "fg_sleep": 0xFFE0,
         "palette": [
             0x0000, 0x8410, 0xFFE0, 0xF800, # 0:Transp, 1:Brown, 2:Yellow, 3:Red
             0xFD20, 0xFFFF, 0x0000, 0x0000, # 4:Orange, 5:White
