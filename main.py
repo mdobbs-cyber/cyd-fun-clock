@@ -61,7 +61,15 @@ BANNER_H   = 22
 TIME_Y     = 212
 TIME_H     = 28
 TIME_SCALE = 3
-TIME_X     = (320 - 5 * 7 * TIME_SCALE) // 2   # ~107
+# "12:00PM" = 7 chars x 7px x scale3 = 147px wide
+TIME_X     = (320 - 7 * 7 * TIME_SCALE) // 2   # ~86
+
+
+def fmt_time(h, m):
+    """Return a 7-char 12-hour AM/PM string, e.g. '12:00PM' or ' 9:30AM'."""
+    suffix = "AM" if h < 12 else "PM"
+    h12    = h % 12 or 12
+    return "{:2d}:{:02d}{}".format(h12, m, suffix)
 
 
 def main():
@@ -214,7 +222,7 @@ def main():
             animal_key, state = sequence[idx]
             theme    = THEMES[animal_key]
             t        = get_local_time()
-            time_str = "{:02d}:{:02d}".format(t[3], t[4])
+            time_str = fmt_time(t[3], t[4])
             bg, fg, palette, sprite = theme_vals(theme, state)
 
             full_redraw(state, theme, time_str)
@@ -232,7 +240,7 @@ def main():
                     time.sleep(0.3)
                     break
                 t2  = get_local_time()
-                ts2 = "{:02d}:{:02d}".format(t2[3], t2[4])
+                ts2 = fmt_time(t2[3], t2[4])
                 if ts2 != time_str:
                     draw_time(ts2, fg, bg)
                     time_str = ts2
@@ -265,7 +273,7 @@ def main():
             state    = get_state(t, config)
             theme    = THEMES[config['active_theme']]
             bg, fg, palette, sprite = theme_vals(theme, state)
-            time_str = "{:02d}:{:02d}".format(t[3], t[4])
+            time_str = fmt_time(t[3], t[4])
 
             if state != current_state:
                 current_state = state
