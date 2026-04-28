@@ -44,27 +44,23 @@ def _blit_sprite(display, path, palette, x=0, y=0):
         display.spi.write(row_buf)
     display.cs.value(1)
 
-# CYD Pinout
+# ── CYD Pinout ─────────────────────────────────────────────────────────────────
 SPI_SCK, SPI_MOSI, SPI_MISO = 14, 13, 12
-DISP_CS, DISP_DC, DISP_BL = 15, 2, 21
+DISP_CS, DISP_DC, DISP_BL   = 15, 2, 21
 TOUCH_CLK, TOUCH_CS, TOUCH_DIN, TOUCH_DO = 25, 33, 32, 39
 LDR_PIN = 34
 RGB_R, RGB_G, RGB_B = 4, 16, 17
 
-# ── Layout constants ──────────────────────────────────────────────────────────
-# Screen: 320 × 240 landscape.  Sprite is 240×240 native, drawn at x=40, y=0.
-SPRITE_X = (320 - 240) // 2   # 40 — centred horizontally
+# ── Layout constants ───────────────────────────────────────────────────────────
+# Sprite is 240x240 native, centred horizontally on the 320x240 screen.
+SPRITE_X = (320 - 240) // 2   # 40
 SPRITE_Y = 0
 
-# Top banner strip
 BANNER_Y   = 4
 BANNER_H   = 22
-
-# Bottom time strip
 TIME_Y     = 212
 TIME_H     = 28
 TIME_SCALE = 3
-# "HH:MM" at scale 3 = 5 chars × 7px/char × 3 = 105 px wide
 TIME_X     = (320 - 5 * 7 * TIME_SCALE) // 2   # ~107
 
 
@@ -72,9 +68,12 @@ def main():
     # ── 1. Load Config ─────────────────────────────────────────────────────────
     config = {
         "tz_offset": -5, "use_dst": True,
-        "wake_weekday": "06:00", "sleep_weekday": "20:00",
-        "wake_weekend": "08:00", "sleep_weekend": "21:00",
-        "active_theme": "kitten", "brightness_auto": True
+        "wake_weekday":       "06:00", "sleep_weekday":      "20:00",
+        "wake_weekend":       "08:00", "sleep_weekend":      "21:00",
+        "read_start_weekday": "",      "read_end_weekday":   "",
+        "read_start_weekend": "",      "read_end_weekend":   "",
+        "active_theme": "kitten", "brightness_auto": True,
+        "demo": False,
     }
     try:
         with open('config.json', 'r') as f:
@@ -105,30 +104,34 @@ def main():
     led_b  = machine.PWM(machine.Pin(RGB_B),   freq=1000)
 
     def set_led(r, g, b):
-        # Active-LOW: 1023 = OFF, 0 = full ON
         led_r.duty(1023 - r)
         led_g.duty(1023 - g)
         led_b.duty(1023 - b)
 
     # ── 3. State ────────────────────────────────────────────────────────────────
-    theme_keys  = sorted(THEMES.keys())
-    theme_idx   = theme_keys.index(config['active_theme']) \
-                  if config['active_theme'] in theme_keys else 0
-    last_tick   = 0
-    current_state   = None   # "WAKE" | "SLEEP"
-    last_time_str   = ""
+    theme_keys    = sorted(THEMES.keys())
+    theme_idx     = theme_keys.index(config['active_theme']) \
+                    if config['active_theme'] in theme_keys else 0
+    last_tick     = 0
+    current_state = None   # "WAKE" | "READ" | "SLEEP"
+    last_time_str = ""
 
     # ── Helpers ─────────────────────────────────────────────────────────────────
+    def parse_hhmm(s):
+        """Return minutes since midnight for 'HH:MM', or -1 if blank/invalid."""
+        try:
+            return int(s[:2]) * 60 + int(s[3:])
+        except:
+            return -1
+
     def is_dst(year, month, day, hour):
-        """Approximate US DST: 2nd Sunday of March → 1st Sunday of November."""
         if month < 3 or month > 11: return False
         if 3 < month < 11:          return True
         first = time.mktime((year, month, 1, 0, 0, 0, 0, 0))
-        wday  = time.localtime(first)[6]          # 0=Mon … 6=Sun
+        wday  = time.localtime(first)[6]
         if month == 3:
-            second_sun = 1 + (6 - wday) % 7 + 7  # 2nd Sunday
+            second_sun = 1 + (6 - wday) % 7 + 7
             return day > second_sun or (day == second_sun and hour >= 2)
-        # November
         first_sun = 1 + (6 - wday) % 7
         return day < first_sun or (day == first_sun and hour < 2)
 
@@ -139,112 +142,116 @@ def main():
             t = time.localtime(time.time() + (offset + 1) * 3600)
         return t
 
-    def is_wake_mode(t, cfg):
-        day = t[6]
-        is_weekend  = day >= 5
-        wake_str  = cfg['wake_weekend']  if is_weekend else cfg['wake_weekday']
-        sleep_str = cfg['sleep_weekend'] if is_weekend else cfg['sleep_weekday']
-        now_m   = t[3] * 60 + t[4]
-        wake_m  = int(wake_str[:2])  * 60 + int(wake_str[3:])
-        sleep_m = int(sleep_str[:2]) * 60 + int(sleep_str[3:])
-        return wake_m <= now_m < sleep_m
+    def get_state(t, cfg):
+        """Return 'WAKE', 'READ', or 'SLEEP' for the given local-time tuple."""
+        is_weekend  = t[6] >= 5
+        now_m = t[3] * 60 + t[4]
+
+        wake_m  = parse_hhmm(cfg['wake_weekend']  if is_weekend else cfg['wake_weekday'])
+        sleep_m = parse_hhmm(cfg['sleep_weekend'] if is_weekend else cfg['sleep_weekday'])
+
+        if is_weekend:
+            read_start_m = parse_hhmm(cfg.get('read_start_weekend', ''))
+            read_end_m   = parse_hhmm(cfg.get('read_end_weekend',   ''))
+        else:
+            read_start_m = parse_hhmm(cfg.get('read_start_weekday', ''))
+            read_end_m   = parse_hhmm(cfg.get('read_end_weekday',   ''))
+
+        # Reading window takes priority (must be within wake hours)
+        if read_start_m >= 0 and read_end_m >= 0:
+            if read_start_m <= now_m < read_end_m:
+                return "READ"
+
+        if wake_m >= 0 and sleep_m >= 0 and wake_m <= now_m < sleep_m:
+            return "WAKE"
+
+        return "SLEEP"
 
     # ── Drawing helpers ──────────────────────────────────────────────────────────
-    def draw_banner(is_wake, fg, bg):
-        """Draw the top banner strip — erase first so old text is gone."""
+    BANNERS = {
+        "WAKE":  ("OK TO WAKE!",      0xFFFF),
+        "READ":  ("READING TIME!",    0xFFE0),
+        "SLEEP": ("SHHH... SLEEPING", 0x7BEF),
+    }
+
+    def draw_banner(state, bg):
+        msg, color = BANNERS[state]
         display.fill_rect(0, BANNER_Y - 2, 320, BANNER_H + 4, bg)
-        if is_wake:
-            msg   = "OK TO WAKE!"
-            color = 0xFFFF
-        else:
-            msg   = "SHHH... SLEEPING"
-            color = 0x7BEF
         x = (320 - len(msg) * 7 * 2) // 2
         font.draw_text(display, msg, max(0, x), BANNER_Y, scale=2, color=color)
 
     def draw_time(time_str, fg, bg):
-        """Erase the previous time, then draw the new one at the same position."""
         display.fill_rect(0, TIME_Y - 2, 320, TIME_H + 4, bg)
         font.draw_text(display, time_str, TIME_X, TIME_Y, scale=TIME_SCALE, color=fg)
 
-    def full_redraw(is_wake, theme, time_str):
-        """Full screen redraw: background → native sprite → text overlays."""
-        bg      = theme['bg_wake']      if is_wake else theme['bg_sleep']
-        fg      = theme['fg_wake']      if is_wake else theme['fg_sleep']
-        palette = theme['palette_wake'] if is_wake else theme['palette_sleep']
-        sprite  = theme['sprite_wake']  if is_wake else theme['sprite_sleep']
+    def theme_vals(theme, state):
+        bg      = theme[f'bg_{state.lower()}']
+        fg      = theme[f'fg_{state.lower()}']
+        palette = theme[f'palette_{state.lower()}']
+        sprite  = theme[f'sprite_{state.lower()}']
+        return bg, fg, palette, sprite
 
+    def full_redraw(state, theme, time_str):
+        bg, fg, palette, sprite = theme_vals(theme, state)
         display.clear(bg)
         _blit_sprite(display, sprite, palette, SPRITE_X, SPRITE_Y)
-        draw_banner(is_wake, fg, bg)
+        draw_banner(state, bg)
         draw_time(time_str, fg, bg)
 
-    # ── Demo Loop ──────────────────────────────────────────────────────────────
+    # ── Demo Loop ────────────────────────────────────────────────────────────────
     def demo_loop():
-        """
-        Cycles through every animal × every state every DEMO_SECS seconds.
-        Sequence: kitten wake → kitten sleep → dolphin wake → dolphin sleep
-                  → chicken wake → chicken sleep → (repeat)
-        Touch still works to skip to the next slide immediately.
-        """
+        """Cycle all animal × state combinations every 5 s. Touch skips ahead."""
         DEMO_SECS = 5
-        states    = [(k, True)  for k in theme_keys] + \
-                    [(k, False) for k in theme_keys]
-        # Interleave: kitten-wake, kitten-sleep, dolphin-wake, dolphin-sleep ...
-        interleaved = []
+        # Build sequence: for each animal show wake → read → sleep
+        sequence = []
         for k in theme_keys:
-            interleaved.append((k, True))
-            interleaved.append((k, False))
+            sequence.append((k, "WAKE"))
+            sequence.append((k, "READ"))
+            sequence.append((k, "SLEEP"))
 
-        idx      = 0
-        n_states = len(interleaved)
-
+        idx = 0
         while True:
-            animal_key, is_wake = interleaved[idx]
+            animal_key, state = sequence[idx]
             theme    = THEMES[animal_key]
             t        = get_local_time()
             time_str = "{:02d}:{:02d}".format(t[3], t[4])
+            bg, fg, palette, sprite = theme_vals(theme, state)
 
-            # Draw the current state
-            full_redraw(is_wake, theme, time_str)
+            full_redraw(state, theme, time_str)
 
-            # LED feedback
-            if is_wake:
+            if state == "WAKE":
                 set_led(0, 512, 0)
+            elif state == "READ":
+                set_led(0, 0, 512)    # Soft blue for reading
             else:
                 set_led(256, 128, 0)
 
-            # Wait DEMO_SECS, but check for touch every 100 ms
             deadline = time.time() + DEMO_SECS
             while time.time() < deadline:
                 if touch.get_touch():
-                    time.sleep(0.3)   # debounce
-                    break             # skip to next slide
-                # Keep time current during the wait
-                t2 = get_local_time()
+                    time.sleep(0.3)
+                    break
+                t2  = get_local_time()
                 ts2 = "{:02d}:{:02d}".format(t2[3], t2[4])
                 if ts2 != time_str:
-                    bg = theme['bg_wake'] if is_wake else theme['bg_sleep']
-                    fg = theme['fg_wake'] if is_wake else theme['fg_sleep']
                     draw_time(ts2, fg, bg)
                     time_str = ts2
-                # Auto-brightness
                 if config['brightness_auto']:
                     raw = ldr.read()
                     led_bl.duty(max(100, min(1023, (4095 - raw) // 4)))
                 time.sleep(0.1)
 
-            idx = (idx + 1) % n_states
+            idx = (idx + 1) % len(sequence)
 
-    # ── Main Loop ──────────────────────────────────────────────────────────────
+    # ── Main Loop ────────────────────────────────────────────────────────────────
     if config.get('demo', False):
-        print("[demo] Starting demo mode — cycling all 6 states every 5 s")
-        demo_loop()          # never returns
+        print("[demo] Starting demo — cycling all states every 5 s")
+        demo_loop()   # never returns
 
     while True:
         now = time.time()
 
-        # Touch → cycle theme → force full redraw
+        # Touch → cycle theme
         if touch.get_touch():
             theme_idx = (theme_idx + 1) % len(theme_keys)
             config['active_theme'] = theme_keys[theme_idx]
@@ -252,38 +259,34 @@ def main():
             last_time_str = ""
             time.sleep(0.3)
 
-        # Periodic update (every 60 s)
+        # Periodic update (every 60 s, or forced on first run / theme change)
         if now - last_tick >= 60 or current_state is None:
             t        = get_local_time()
-            is_wake  = is_wake_mode(t, config)
-            state    = "WAKE" if is_wake else "SLEEP"
+            state    = get_state(t, config)
             theme    = THEMES[config['active_theme']]
-            bg       = theme['bg_wake']  if is_wake else theme['bg_sleep']
-            fg       = theme['fg_wake']  if is_wake else theme['fg_sleep']
+            bg, fg, palette, sprite = theme_vals(theme, state)
             time_str = "{:02d}:{:02d}".format(t[3], t[4])
 
             if state != current_state:
-                # ── State transition: full redraw (sprite changes too) ──────────
                 current_state = state
-                full_redraw(is_wake, theme, time_str)
+                full_redraw(state, theme, time_str)
 
-                if is_wake:
-                    set_led(0, 512, 0)    # Soft green
+                if state == "WAKE":
+                    set_led(0, 512, 0)
+                elif state == "READ":
+                    set_led(0, 0, 512)    # Soft blue for reading time
                 else:
                     set_led(256, 128, 0)  # Soft amber nightlight
 
             elif time_str != last_time_str:
-                # ── Same state, only time digits changed: erase + redraw time ──
                 draw_time(time_str, fg, bg)
 
             last_time_str = time_str
             last_tick = now
 
-        # Auto-brightness via LDR
         if config['brightness_auto']:
             raw = ldr.read()
-            bright = (4095 - raw) // 4       # invert: dark room → low brightness
-            led_bl.duty(max(100, min(1023, bright)))
+            led_bl.duty(max(100, min(1023, (4095 - raw) // 4)))
 
         time.sleep(0.1)
 

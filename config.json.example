@@ -3,11 +3,15 @@
     "wifi_pass": "YOUR_WIFI_PASSWORD",
     "tz_offset": -5,
     "use_dst": true,
-    "wake_weekday": "06:00",
-    "sleep_weekday": "20:00",
-    "wake_weekend": "08:00",
-    "sleep_weekend": "21:00",
-    "active_theme": "kitten",
-    "brightness_auto": true,
-    "demo": false
+    "wake_weekday":       "06:00",
+    "sleep_weekday":      "20:00",
+    "wake_weekend":       "08:00",
+    "sleep_weekend":      "21:00",
+    "read_start_weekday": "19:00",
+    "read_end_weekday":   "20:00",
+    "read_start_weekend": "20:00",
+    "read_end_weekend":   "21:00",
+    "active_theme":       "kitten",
+    "brightness_auto":    true,
+    "demo":               false
 }

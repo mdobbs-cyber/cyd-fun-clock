@@ -1,114 +1,78 @@
-import machine
-import time
-import ustruct
+# Animal Companion Clock — Theme definitions
+# Each theme has wake / sleep / read states.
+# Sprites are native 240x240 4-bit .bin files in sprites/.
 
-# Constants for ILI9341
-LCD_WIDTH = 240
-LCD_HEIGHT = 320
-
-class ILI9341:
-    def __init__(self, spi, cs, dc, rst=None, bl=None, rotation=3):
-        self.spi = spi
-        self.cs = cs
-        self.dc = dc
-        self.rst = rst
-        self.bl = bl
-        self.width = 240
-        self.height = 320
-        
-        self.cs.init(self.cs.OUT, value=1)
-        self.dc.init(self.dc.OUT, value=0)
-        
-        if self.rst and self.rst != -1:
-            self.rst.init(self.rst.OUT, value=1)
-            self.reset()
-        
-        if self.bl and self.bl != -1:
-            self.bl.init(self.bl.OUT)
-            self.backlight(True)
-            
-        self.init()
-
-    def backlight(self, on):
-        if self.bl and self.bl != -1:
-            self.bl.value(1 if on else 0)
-
-    def _write_cmd(self, cmd):
-        self.dc.value(0)
-        self.cs.value(0)
-        self.spi.write(bytearray([cmd]))
-        self.cs.value(1)
-
-    def _write_data(self, data):
-        self.dc.value(1)
-        self.cs.value(0)
-        self.spi.write(data)
-        self.cs.value(1)
-
-    def reset(self):
-        self.rst.value(0)
-        time.sleep(0.05)
-        self.rst.value(1)
-        time.sleep(0.05)
-
-    def init(self, rotation=3):
-        # Rotation 3 is landscape 270 degrees
-        # MADCTL bits: MY, MX, MV, ML, BGR, MH
-        madctl = [
-            0x48, # 0: Portrait
-            0x28, # 1: Landscape
-            0x88, # 2: Portrait 180
-            0xE8  # 3: Landscape 270
-        ][rotation % 4]
-        
-        if rotation % 2 == 1:
-            self.width, self.height = 320, 240
-        else:
-            self.width, self.height = 240, 320
-        
-        for cmd, data in [
-            (0x01, None), # Soft reset
-            (0x11, None), # Sleep out
-            (0x3A, b'\x55'), # Interface pixel format (16-bit)
-            (0x36, bytearray([madctl])), # MADCTL
-            (0x29, None), # Display on
-        ]:
-            if data:
-                self._write_cmd(cmd)
-                self._write_data(data)
-            else:
-                self._write_cmd(cmd)
-                time.sleep(0.1)
-
-    def set_window(self, x0, y0, x1, y1):
-        self._write_cmd(0x2A) # Column addr set
-        self._write_data(ustruct.pack(">HH", x0, x1))
-        self._write_cmd(0x2B) # Row addr set
-        self._write_data(ustruct.pack(">HH", y0, y1))
-        self._write_cmd(0x2C) # Memory write
-
-    def fill_rect(self, x, y, w, h, color):
-        x = max(0, min(x, self.width - 1))
-        y = max(0, min(y, self.height - 1))
-        w = min(w, self.width - x)
-        h = min(h, self.height - y)
-        self.set_window(x, y, x + w - 1, y + h - 1)
-        chunk_size = 1024
-        buf = ustruct.pack(">H", color) * chunk_size
-        pixels = w * h
-        self.dc.value(1)
-        self.cs.value(0)
-        for _ in range(pixels // chunk_size):
-            self.spi.write(buf)
-        
-        remainder = pixels % chunk_size
-        if remainder > 0:
-            self.spi.write(buf[:remainder * 2])
-        
-        self.cs.value(1)
-
-    def clear(self, color=0):
-        self.fill_rect(0, 0, self.width, self.height, color)
-
-    def color565(self, r, g, b):
-        return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+THEMES = {
+    "kitten": {
+        "name": "Luna",
+        "bg_wake":  0xBDF7, "fg_wake":  0x0000,
+        "bg_sleep": 0x10A2, "fg_sleep": 0xFFFF,
+        "bg_read":  0x5014, "fg_read":  0xFFFF,
+        "palette_wake":  [0x969E,0x969E,0x969E,0x969E,0x969E,0x969E,0x969E,0x967E,0x967E,0x85DA,0x4A09,0x10A3,0x967E,0xB534,0xD73C,0x86BB],
+        "palette_sleep": [0x0027,0x0027,0x0027,0x0027,0x0025,0x0004,0x2965,0x18E4,0x0884,0x18C4,0x2945,0x9C91,0x18C9,0x10C9,0x10C9,0x10C9],
+        "palette_read":  [0x9350,0x9330,0x9B50,0x4968,0x7A0B,0x926C,0x9B2E,0xB38C,0xAB4E,0x6987,0x3106,0xA28A,0xF5EF,0x0821,0x0000,0x9B51],
+        "sprite_wake":  "sprites/kitten_wake.bin",
+        "sprite_sleep": "sprites/kitten_sleep.bin",
+        "sprite_read":  "sprites/kitten_read.bin",
+    },
+    "dolphin": {
+        "name": "Splash",
+        "bg_wake":  0x03FF, "fg_wake":  0xFFFF,
+        "bg_sleep": 0x000F, "fg_sleep": 0x07FF,
+        "bg_read":  0x5014, "fg_read":  0xFFFF,
+        "palette_wake":  [0x7FBE,0x8FBE,0xB7DF,0xCFDF,0xFFFF,0xFFFF,0xE7FF,0x6EFD,0x1A70,0x663B,0x14FA,0x2F9F,0x071E,0x171E,0x06DE,0x061D],
+        "palette_sleep": [0x0043,0x0044,0x0002,0x0022,0x22AD,0x118A,0x8F1C,0x6536,0x0948,0x08E7,0x0064,0x00A5,0x0928,0x00E6,0x00A5,0x00A5],
+        "palette_read":  [0xB519,0xB51A,0xB51A,0xB51A,0xB519,0xB519,0xBD3A,0xBD39,0xD5FA,0xEEFC,0xB519,0x5B72,0x7477,0xB59A,0xBE7C,0x9D19],
+        "sprite_wake":  "sprites/dolphin_wake.bin",
+        "sprite_sleep": "sprites/dolphin_sleep.bin",
+        "sprite_read":  "sprites/dolphin_read.bin",
+    },
+    "chicken": {
+        "name": "Peep",
+        "bg_wake":  0x07E0, "fg_wake":  0xFFFF,
+        "bg_sleep": 0x2104, "fg_sleep": 0xFFE0,
+        "bg_read":  0x5014, "fg_read":  0xFFE0,
+        "palette_wake":  [0x4639,0xE79C,0x3DD6,0x2862,0x3348,0x2C69,0xA925,0xF526,0xAAE6,0xFECA,0x6D4A,0x8665,0x8686,0x8EA7,0x7690,0xFEEA],
+        "palette_sleep": [0xFFBB,0xFFDA,0xFFBB,0xFFBB,0xFFBB,0xFFDB,0xEE6F,0x7328,0x0020,0x0060,0x0040,0x0923,0x08C1,0x0040,0x1923,0x4184],
+        "palette_read":  [0x30A5,0x4106,0x5905,0x38C5,0x2064,0x5148,0x6187,0x2884,0x71C8,0x92A8,0x3908,0x820A,0x0821,0xBB47,0xD486,0xF66B],
+        "sprite_wake":  "sprites/chicken_wake.bin",
+        "sprite_sleep": "sprites/chicken_sleep.bin",
+        "sprite_read":  "sprites/chicken_read.bin",
+    },
+    "sloth": {
+        "name": "Slowpoke",
+        "bg_wake":  0x0600, "fg_wake":  0xFFFF,
+        "bg_sleep": 0x0003, "fg_sleep": 0xAFFF,
+        "bg_read":  0x5014, "fg_read":  0xFFFF,
+        "palette_wake":  [0x0AC6,0x1D86,0x3744,0x21E4,0x0081,0x1BA6,0x0000,0x0C87,0x61C5,0x5144,0x8AC7,0x30C3,0xAB89,0x7F08,0x8B87,0x9588],
+        "palette_sleep": [0x0001,0x0001,0x0083,0x00E6,0x00C4,0x0147,0x2105,0x11C9,0x01A8,0x128A,0x1883,0x8532,0x536B,0x0000,0x4289,0x41A5],
+        "palette_read":  [0x8AD2,0x61EC,0x0000,0x59A8,0x28E3,0xA3E9,0x6229,0xA353,0x828D,0x724C,0x7B2E,0x9312,0xC4B0,0xB3D0,0xBC14,0xEEB4],
+        "sprite_wake":  "sprites/sloth_wake.bin",
+        "sprite_sleep": "sprites/sloth_sleep.bin",
+        "sprite_read":  "sprites/sloth_read.bin",
+    },
+    "puppy": {
+        "name": "Biscuit",
+        "bg_wake":  0xFFE0, "fg_wake":  0x0000,
+        "bg_sleep": 0x2082, "fg_sleep": 0xFDA0,
+        "bg_read":  0x5014, "fg_read":  0xFFFF,
+        "palette_wake":  [0xFE48,0xFE49,0xFE49,0xFE48,0xFE49,0xFE49,0xFE48,0xF5CB,0xFE4A,0xE50A,0x2883,0x8A25,0xFE49,0xFE8B,0xD408,0xB346],
+        "palette_sleep": [0x2082,0x2082,0x2082,0x2082,0x2082,0x2082,0x2062,0x2082,0x28C3,0x0820,0xAB69,0x8205,0x3966,0xF694,0xF5AB,0xDC69],
+        "palette_read":  [0x1063,0x20A4,0x4967,0x59A9,0x0821,0x8A8C,0x92CF,0xC3D2,0xB3EE,0xCC2D,0xE4E9,0xF64E,0x79E7,0xAB2B,0xBB46,0xBBAE],
+        "sprite_wake":  "sprites/puppy_wake.bin",
+        "sprite_sleep": "sprites/puppy_sleep.bin",
+        "sprite_read":  "sprites/puppy_read.bin",
+    },
+    "anteater": {
+        "name": "Snorkel",
+        "bg_wake":  0xFCC0, "fg_wake":  0x0000,
+        "bg_sleep": 0x0884, "fg_sleep": 0xFFFF,
+        "bg_read":  0x5014, "fg_read":  0xFFFF,
+        "palette_wake":  [0xFE4C,0xFE4B,0xFF14,0xFE0A,0xCD0A,0x8BCB,0xD3A6,0x8AC7,0x6226,0x2020,0x4165,0x9CAD,0xFD28,0xF466,0xF487,0xF487],
+        "palette_sleep": [0x08C7,0x08C7,0x08C7,0x08C7,0x08C7,0x08A6,0x41E7,0x632D,0x7B8D,0x5289,0x9C90,0x0043,0x1947,0x10E6,0x2186,0x0002],
+        "palette_read":  [0x412A,0x71ED,0x59AA,0xB36E,0xA2EC,0xD550,0xF653,0x28A7,0xAC4F,0x1042,0x7B2C,0x6A4B,0x28A6,0x30E6,0x9450,0x4969],
+        "sprite_wake":  "sprites/anteater_wake.bin",
+        "sprite_sleep": "sprites/anteater_sleep.bin",
+        "sprite_read":  "sprites/anteater_read.bin",
+    },
+}
