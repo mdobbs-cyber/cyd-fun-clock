@@ -52,8 +52,7 @@ LDR_PIN = 34
 RGB_R, RGB_G, RGB_B = 4, 16, 17
 
 # ── Layout constants ───────────────────────────────────────────────────────────
-# Sprite is 240x240 native, centred horizontally on the 320x240 screen.
-SPRITE_X = (320 - 240) // 2   # 40
+SPRITE_X = (320 - 240) // 2   # 40 — centred horizontally
 SPRITE_Y = 0
 
 BANNER_Y   = 4
@@ -63,6 +62,9 @@ TIME_H     = 28
 TIME_SCALE = 3
 # "12:00PM" = 7 chars x 7px x scale3 = 147px wide
 TIME_X     = (320 - 7 * 7 * TIME_SCALE) // 2   # ~86
+
+DEMO_SECS      = 5      # seconds per demo slide
+HOLD_MS        = 2000   # ms to hold for a long-press
 
 
 def fmt_time(h, m):
@@ -116,17 +118,24 @@ def main():
         led_g.duty(1023 - g)
         led_b.duty(1023 - b)
 
-    # ── 3. State ────────────────────────────────────────────────────────────────
+    # ── 3. Runtime state ────────────────────────────────────────────────────────
     theme_keys    = sorted(THEMES.keys())
     theme_idx     = theme_keys.index(config['active_theme']) \
                     if config['active_theme'] in theme_keys else 0
+
+    # Demo sequence: every animal in wake → read → sleep order
+    demo_seq = [(k, s) for k in theme_keys for s in ("WAKE", "READ", "SLEEP")]
+
+    demo_active   = config.get('demo', False)
+    demo_idx      = 0
+    demo_deadline = 0   # time.time() by which current slide auto-advances
+
     last_tick     = 0
-    current_state = None   # "WAKE" | "READ" | "SLEEP"
+    current_state = None
     last_time_str = ""
 
     # ── Helpers ─────────────────────────────────────────────────────────────────
     def parse_hhmm(s):
-        """Return minutes since midnight for 'HH:MM', or -1 if blank/invalid."""
         try:
             return int(s[:2]) * 60 + int(s[3:])
         except:
@@ -151,28 +160,17 @@ def main():
         return t
 
     def get_state(t, cfg):
-        """Return 'WAKE', 'READ', or 'SLEEP' for the given local-time tuple."""
-        is_weekend  = t[6] >= 5
-        now_m = t[3] * 60 + t[4]
+        is_weekend   = t[6] >= 5
+        now_m        = t[3] * 60 + t[4]
+        wake_m       = parse_hhmm(cfg['wake_weekend']  if is_weekend else cfg['wake_weekday'])
+        sleep_m      = parse_hhmm(cfg['sleep_weekend'] if is_weekend else cfg['sleep_weekday'])
+        read_start_m = parse_hhmm(cfg.get('read_start_weekend' if is_weekend else 'read_start_weekday', ''))
+        read_end_m   = parse_hhmm(cfg.get('read_end_weekend'   if is_weekend else 'read_end_weekday',   ''))
 
-        wake_m  = parse_hhmm(cfg['wake_weekend']  if is_weekend else cfg['wake_weekday'])
-        sleep_m = parse_hhmm(cfg['sleep_weekend'] if is_weekend else cfg['sleep_weekday'])
-
-        if is_weekend:
-            read_start_m = parse_hhmm(cfg.get('read_start_weekend', ''))
-            read_end_m   = parse_hhmm(cfg.get('read_end_weekend',   ''))
-        else:
-            read_start_m = parse_hhmm(cfg.get('read_start_weekday', ''))
-            read_end_m   = parse_hhmm(cfg.get('read_end_weekday',   ''))
-
-        # Reading window takes priority (must be within wake hours)
-        if read_start_m >= 0 and read_end_m >= 0:
-            if read_start_m <= now_m < read_end_m:
-                return "READ"
-
+        if read_start_m >= 0 and read_end_m >= 0 and read_start_m <= now_m < read_end_m:
+            return "READ"
         if wake_m >= 0 and sleep_m >= 0 and wake_m <= now_m < sleep_m:
             return "WAKE"
-
         return "SLEEP"
 
     # ── Drawing helpers ──────────────────────────────────────────────────────────
@@ -193,11 +191,8 @@ def main():
         font.draw_text(display, time_str, TIME_X, TIME_Y, scale=TIME_SCALE, color=fg)
 
     def theme_vals(theme, state):
-        bg      = theme[f'bg_{state.lower()}']
-        fg      = theme[f'fg_{state.lower()}']
-        palette = theme[f'palette_{state.lower()}']
-        sprite  = theme[f'sprite_{state.lower()}']
-        return bg, fg, palette, sprite
+        s = state.lower()
+        return theme['bg_'+s], theme['fg_'+s], theme['palette_'+s], theme['sprite_'+s]
 
     def full_redraw(state, theme, time_str):
         bg, fg, palette, sprite = theme_vals(theme, state)
@@ -206,97 +201,125 @@ def main():
         draw_banner(state, bg)
         draw_time(time_str, fg, bg)
 
-    # ── Demo Loop ────────────────────────────────────────────────────────────────
-    def demo_loop():
-        """Cycle all animal × state combinations every 5 s. Touch skips ahead."""
-        DEMO_SECS = 5
-        # Build sequence: for each animal show wake → read → sleep
-        sequence = []
-        for k in theme_keys:
-            sequence.append((k, "WAKE"))
-            sequence.append((k, "READ"))
-            sequence.append((k, "SLEEP"))
+    def apply_led(state):
+        if state == "WAKE":
+            set_led(0, 512, 0)
+        elif state == "READ":
+            set_led(0, 0, 512)
+        else:
+            set_led(256, 128, 0)
 
-        idx = 0
-        while True:
-            animal_key, state = sequence[idx]
-            theme    = THEMES[animal_key]
-            t        = get_local_time()
-            time_str = fmt_time(t[3], t[4])
-            bg, fg, palette, sprite = theme_vals(theme, state)
+    def show_toast(msg, color=0xFFFF):
+        """Flash a short centre message on a black bar for ~1 second."""
+        display.fill_rect(0, 100, 320, 40, 0x0000)
+        x = (320 - len(msg) * 7 * 2) // 2
+        font.draw_text(display, msg, max(0, x), 110, scale=2, color=color)
+        time.sleep(1)
 
-            full_redraw(state, theme, time_str)
-
-            if state == "WAKE":
-                set_led(0, 512, 0)
-            elif state == "READ":
-                set_led(0, 0, 512)    # Soft blue for reading
-            else:
-                set_led(256, 128, 0)
-
-            deadline = time.time() + DEMO_SECS
-            while time.time() < deadline:
-                if touch.get_touch():
-                    time.sleep(0.3)
-                    break
-                t2  = get_local_time()
-                ts2 = fmt_time(t2[3], t2[4])
-                if ts2 != time_str:
-                    draw_time(ts2, fg, bg)
-                    time_str = ts2
-                if config['brightness_auto']:
-                    raw = ldr.read()
-                    led_bl.duty(max(100, min(1023, (4095 - raw) // 4)))
-                time.sleep(0.1)
-
-            idx = (idx + 1) % len(sequence)
+    def check_touch():
+        """
+        Returns:
+          'tap'  — brief touch (< HOLD_MS)
+          'hold' — long press (>= HOLD_MS) — use to toggle demo mode
+          None   — no touch detected
+        """
+        if not touch.get_touch():
+            return None
+        start = time.ticks_ms()
+        while touch.get_touch():
+            if time.ticks_diff(time.ticks_ms(), start) >= HOLD_MS:
+                # Wait for finger to lift before returning
+                while touch.get_touch():
+                    time.sleep(0.05)
+                return 'hold'
+            time.sleep(0.05)
+        return 'tap'
 
     # ── Main Loop ────────────────────────────────────────────────────────────────
-    if config.get('demo', False):
-        print("[demo] Starting demo — cycling all states every 5 s")
-        demo_loop()   # never returns
-
     while True:
-        now = time.time()
+        now     = time.time()
+        gesture = check_touch()
 
-        # Touch → cycle theme
-        if touch.get_touch():
-            theme_idx = (theme_idx + 1) % len(theme_keys)
-            config['active_theme'] = theme_keys[theme_idx]
+        # ── Long-press: toggle demo mode ───────────────────────────────────────
+        if gesture == 'hold':
+            demo_active = not demo_active
+            demo_idx      = 0
+            demo_deadline = 0   # trigger immediate slide draw
             current_state = None
             last_time_str = ""
-            time.sleep(0.3)
+            if demo_active:
+                show_toast("DEMO  ON", 0xFFE0)
+            else:
+                show_toast("DEMO  OFF", 0xF800)
 
-        # Periodic update (every 60 s, or forced on first run / theme change)
-        if now - last_tick >= 60 or current_state is None:
-            t        = get_local_time()
-            state    = get_state(t, config)
-            theme    = THEMES[config['active_theme']]
-            bg, fg, palette, sprite = theme_vals(theme, state)
-            time_str = fmt_time(t[3], t[4])
+        # ══════════════════════════════════════════════════════════════════════
+        # DEMO MODE
+        # ══════════════════════════════════════════════════════════════════════
+        elif demo_active:
+            if gesture == 'tap':
+                # Skip to next slide immediately
+                demo_idx      = (demo_idx + 1) % len(demo_seq)
+                demo_deadline = 0
 
-            if state != current_state:
-                current_state = state
+            if now >= demo_deadline:
+                animal_key, state = demo_seq[demo_idx]
+                theme    = THEMES[animal_key]
+                t        = get_local_time()
+                time_str = fmt_time(t[3], t[4])
+
                 full_redraw(state, theme, time_str)
+                apply_led(state)
 
-                if state == "WAKE":
-                    set_led(0, 512, 0)
-                elif state == "READ":
-                    set_led(0, 0, 512)    # Soft blue for reading time
-                else:
-                    set_led(256, 128, 0)  # Soft amber nightlight
+                last_time_str = time_str
+                demo_deadline = now + DEMO_SECS
+                demo_idx      = (demo_idx + 1) % len(demo_seq)
 
-            elif time_str != last_time_str:
-                draw_time(time_str, fg, bg)
+            else:
+                # Between slides — keep time current
+                t        = get_local_time()
+                time_str = fmt_time(t[3], t[4])
+                if time_str != last_time_str:
+                    # Recover current slide info for the bg/fg colours
+                    prev_idx   = (demo_idx - 1) % len(demo_seq)
+                    ak, st     = demo_seq[prev_idx]
+                    bg, fg, _, _ = theme_vals(THEMES[ak], st)
+                    draw_time(time_str, fg, bg)
+                    last_time_str = time_str
 
-            last_time_str = time_str
-            last_tick = now
+        # ══════════════════════════════════════════════════════════════════════
+        # NORMAL MODE
+        # ══════════════════════════════════════════════════════════════════════
+        else:
+            if gesture == 'tap':
+                theme_idx = (theme_idx + 1) % len(theme_keys)
+                config['active_theme'] = theme_keys[theme_idx]
+                current_state = None
+                last_time_str = ""
 
+            if now - last_tick >= 60 or current_state is None:
+                t        = get_local_time()
+                state    = get_state(t, config)
+                theme    = THEMES[config['active_theme']]
+                bg, fg, palette, sprite = theme_vals(theme, state)
+                time_str = fmt_time(t[3], t[4])
+
+                if state != current_state:
+                    current_state = state
+                    full_redraw(state, theme, time_str)
+                    apply_led(state)
+
+                elif time_str != last_time_str:
+                    draw_time(time_str, fg, bg)
+
+                last_time_str = time_str
+                last_tick     = now
+
+        # ── Auto-brightness ────────────────────────────────────────────────────
         if config['brightness_auto']:
             raw = ldr.read()
             led_bl.duty(max(100, min(1023, (4095 - raw) // 4)))
 
-        time.sleep(0.1)
+        time.sleep(0.05)   # tighter loop needed for hold detection
 
 
 if __name__ == "__main__":
