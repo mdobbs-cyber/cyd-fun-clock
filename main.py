@@ -8,18 +8,9 @@ from xpt2046 import XPT2046
 from themes import THEMES
 
 # ── Sprite renderer (self-contained, no external module dependency) ────────────
-_spr_cache = {}
 
 def _blit_sprite(display, path, palette, x=0, y=0):
-    """Load a 240x240 4-bit .bin sprite and blit it to the display."""
-    if _spr_cache.get('p') == path:
-        data = _spr_cache['d']
-    else:
-        with open(path, 'rb') as f:
-            data = f.read()
-        _spr_cache['p'] = path
-        _spr_cache['d'] = data
-
+    """Load a 240x240 4-bit .bin sprite and blit it to the display in memory-efficient chunks."""
     n = 240
     pal = bytearray(32)
     for i, c in enumerate(palette):
@@ -32,16 +23,28 @@ def _blit_sprite(display, path, palette, x=0, y=0):
 
     display.dc.value(1)
     display.cs.value(0)
-    for row in range(n):
-        off = row * half_n
-        for col in range(n):
-            v   = data[off + col // 2]
-            idx = (v >> 4) if (col & 1) == 0 else (v & 0x0F)
-            p   = idx * 2
-            pos = col * 2
-            row_buf[pos]     = pal[p]
-            row_buf[pos + 1] = pal[p + 1]
-        display.spi.write(row_buf)
+    try:
+        with open(path, 'rb') as f:
+            # Read in chunks of 10 rows (1200 bytes vs 28.8KB) to avoid MemoryError
+            chunk_rows = 10
+            for r_block in range(0, n, chunk_rows):
+                chunk = f.read(half_n * chunk_rows)
+                if not chunk:
+                    break
+                for r in range(min(chunk_rows, n - r_block)):
+                    off = r * half_n
+                    for col in range(n):
+                        if off + col // 2 >= len(chunk):
+                            break
+                        v   = chunk[off + col // 2]
+                        idx = (v >> 4) if (col & 1) == 0 else (v & 0x0F)
+                        p   = idx * 2
+                        pos = col * 2
+                        row_buf[pos]     = pal[p]
+                        row_buf[pos + 1] = pal[p + 1]
+                    display.spi.write(row_buf)
+    except Exception as e:
+        print("Sprite error:", path, e)
     display.cs.value(1)
 
 # ── CYD Pinout ─────────────────────────────────────────────────────────────────
